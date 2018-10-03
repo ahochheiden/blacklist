@@ -1,0 +1,9 @@
+## Interface: 80000
+## Title: Blacklist
+## Author: Kanadians-Kel'Thuzad
+## Notes: Allows you to blacklist players. You will be notified when a player you've blacklisted joins your party.
+## Version: 0.0.1
+
+## SavedVariables: blacklistLookup
+
+Blacklist.lua
