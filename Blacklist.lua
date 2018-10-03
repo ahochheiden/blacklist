@@ -58,6 +58,37 @@ Blacklist:SetScript("OnEvent", onEvent)
 Blacklist:RegisterEvent("ADDON_LOADED")
 Blacklist:RegisterEvent("PLAYER_LOGOUT")
 
+classColorsLookup = {
+	"C79C6E", -- [1] Warrior
+	"F58CBA", -- [2] Paladin
+	"ABD473", -- [3] Hunter
+	"FFF569", -- [4] Rogue
+	"FFFFFF", -- [5] Priest
+	"C41F3B", -- [6] Death Knight
+	"0070DE", -- [7] Shaman
+	"40C7EB", -- [8] Mage
+	"8787ED", -- [9] Warlock
+	"00FF96", -- [10] Monk
+	"FF7D0A", -- [11] Druid
+	"A330C9", -- [12] Demon Hunter
+}
+
+local function colorize(color, text)
+	local colorHelper = {
+		'|cff', color, text, '|r'
+	}
+
+	return table.concat(colorHelper, "")
+end
+
+local function colorByClass(index, name)
+	local color = classColorsLookup[index]
+	return colorize(color, name)	
+end
+
+local function colorizeFullUnitName()
+
+end
 SLASH_BLACKLIST1 = "/blacklist"
 function SlashCmdList.BLACKLIST(msg)	
 	--printTable(LookupTable)
@@ -69,7 +100,7 @@ function SlashCmdList.BLACKLIST(msg)
 	end
 
 	for i = 1, 12 do
-		print(name .. realm)
+		print('|cff' .. colors[i] .. name .. '|r-'.. realm)
 	end
 end
 
@@ -79,9 +110,11 @@ function SlashCmdList.BL(msg)
 
 	if fullName ~= nil then
 		local newEntry = {}
+		local localizedClass, englishClass, classIndex = UnitClass("target");
 
 
 		newEntry['REASON'] = 'a very bad man'
+		newEntry['CLASS'] = classIndex
 
 		LookupTable[fullName] = newEntry
 	end
