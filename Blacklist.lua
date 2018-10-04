@@ -34,10 +34,9 @@ local onEvent = function(self, event, arg1)
 			
 			debugOutput('First login', 'blacklistLookup initialized.')
 		end
-
 	else
 		if event == "PLAYER_LOGOUT" then
-
+			-- nothing to do, remove later
 		end
     end
 end
@@ -81,15 +80,10 @@ local function colorize(color, text)
 	return table.concat(colorHelper, "")
 end
 
-local function colorByClass(index, name)
-	local color = classColorsLookup[index]
-	return colorize(color, name)	
-end
-
 local function colorizeFullUnitName(name, realm, classIndex)
-	coloredName = colorByClass(classIndex, name)
+	local color = classColorsLookup[classIndex]
 
-	output = coloredName .. '-' .. realm
+	output = colorize(color, name) .. '-' .. realm
 
 	return output
 end
@@ -107,7 +101,7 @@ end
 SLASH_BLACKLIST1 = "/blacklist"
 SLASH_BLACKLIST2 = "/bl"
 function SlashCmdList.BLACKLIST(msg)	
-	debugOutput('Command arguments:', msg)
+	debugOutput('Command arguments', msg)
 
 	if msg == '' then
 		if blacklistLookup ~= nil then
@@ -131,12 +125,19 @@ function SlashCmdList.BLACKLIST(msg)
 		if fullName ~= nil then
 			local newEntry = {}
 			local localizedClass, englishClass, classIndex = UnitClass("target");
-	
-	
+		
 			newEntry['REASON'] = 'a very bad man'
 			newEntry['CLASS'] = classIndex
 	
 			blacklistLookup[fullName] = newEntry
+			
+			debugOutput('Blacklisting target: ', fullName .. ', ' .. englishClass)
 		end
+	end
+
+	if msg == 'clear' then
+		blacklistLookup = {}
+			
+		debugOutput('Blacklist cleared', '')
 	end
 end
