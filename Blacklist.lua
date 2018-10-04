@@ -1,4 +1,4 @@
-﻿local debug = 1
+﻿local debug = 0
 
 local function debugOutput(identifier, output)
 	if debug == 1 then
@@ -7,10 +7,10 @@ local function debugOutput(identifier, output)
 end
 
 local function getFullUnitName(unit)
-	local output = nil
+	local name, realm = nil
 
 	if UnitPlayerControlled(unit) then
-		local name, realm = UnitName(unit)
+		name, realm = UnitName(unit)
 
 		-- realm name is nil is they are from the same realm as
 		-- as the local palyer, so we need to get the name of the
@@ -18,11 +18,9 @@ local function getFullUnitName(unit)
 		if realm == nil then
 			realm = GetRealmName()
 		end
-		
-		output = name .. '-' .. realm
 	end
 
-	return output
+	return name, realm
 end
 
 local onEvent = function(self, event, arg1)
@@ -101,43 +99,75 @@ end
 SLASH_BLACKLIST1 = "/blacklist"
 SLASH_BLACKLIST2 = "/bl"
 function SlashCmdList.BLACKLIST(msg)	
-	debugOutput('Command arguments', msg)
+	debugOutput('All arguments', msg)
 
-	if msg == '' then
+	splitArgs = splitString(msg, ' ')
+	command = splitArgs[1]
+
+	debugOutput('command', command)
+
+	table.remove(splitArgs, 1)
+	remainingArgs = table.concat(splitArgs, " ")
+
+	debugOutput('remainingArgs', remainingArgs)
+
+	if command == '' then
 		if blacklistLookup ~= nil then
-			for index, value in pairs(blacklistLookup) do
-				nameRealmSplit = splitString(index, '-')
+
+			playersBlacklisted = 0
+
+			for _ in pairs(blacklistLookup) do 
+				playersBlacklisted = playersBlacklisted + 1
+			 end
+
+			if playersBlacklisted == 0 then
+				print('Your blacklist is currently empty.')
+			else		
+				print('Blacklisted Player(s):')		
+				for index, value in pairs(blacklistLookup) do
+					nameRealmSplit = splitString(index, '-')
 				
-				name = nameRealmSplit[1]
-				realm = nameRealmSplit[2]
+					name = nameRealmSplit[1]
+					realm = nameRealmSplit[2]
 		
-				colorizedUnitName = colorizeFullUnitName(name, realm, value['CLASS'])
+					colorizedUnitName = colorizeFullUnitName(name, realm, value['CLASS'])
 		
-				output = colorizedUnitName .. ' blacklist reason: ' .. value['REASON']
-				print(output)
+					output = colorizedUnitName .. ' blacklist reason: ' .. value['REASON']
+					print(output)
+				end
 			end
 		end
 	end
 
-	if msg == 'target' then
-		local fullName = getFullUnitName('target')
+	if command == 'target' then
+		local name, realm = getFullUnitName('target')
 
-		if fullName ~= nil then
+		if name ~= nil and realm ~= nil then
+
+			reason = remainingArgs
+
+			if reason == nil or reason == '' then
+				reason = 'None reason provided.'
+			end
+
+			debugOutput('reason', reason)
+
 			local newEntry = {}
 			local localizedClass, englishClass, classIndex = UnitClass("target");
 		
-			newEntry['REASON'] = 'a very bad man'
+			newEntry['REASON'] = reason
 			newEntry['CLASS'] = classIndex
 	
+			fullName = name .. '-' .. realm
+
 			blacklistLookup[fullName] = newEntry
 			
-			debugOutput('Blacklisting target: ', fullName .. ', ' .. englishClass)
+			print('Blacklisting: '.. colorizeFullUnitName(name, realm, classIndex) .. ', Reason: ' .. reason)
 		end
 	end
 
-	if msg == 'clear' then
+	if command == 'clear' then
 		blacklistLookup = {}
-			
-		debugOutput('Blacklist cleared', '')
+		print("Your blacklist has been cleared.")
 	end
 end
