@@ -1,8 +1,8 @@
 ﻿local debug = 1
 
-local function debugOutput(message)
+local function debugOutput(identifier, output)
 	if debug == 1 then
-		print(message)
+		print(identifier .. ': "'.. output .. '"')
 	end
 end
 
@@ -28,11 +28,11 @@ end
 local onEvent = function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "Blacklist" then
         -- Our saved variables, if they exist, have been loaded at this point.
-        if LookupTable == nil then
+        if blacklistLookup == nil then
             -- This is the first time this addon is loaded; set SVs to default values
-			LookupTable = {}
+			blacklistLookup = {}
 			
-			debugOutput('First login, LookupTable initialized.')
+			debugOutput('First login', 'blacklistLookup initialized.')
 		end
 
 	else
@@ -86,36 +86,57 @@ local function colorByClass(index, name)
 	return colorize(color, name)	
 end
 
-local function colorizeFullUnitName()
+local function colorizeFullUnitName(name, realm, classIndex)
+	coloredName = colorByClass(classIndex, name)
 
+	output = coloredName .. '-' .. realm
+
+	return output
 end
+
+function splitString(original, delimiter)
+	result = {};
+	
+    for match in (original .. delimiter):gmatch("(.-)" .. delimiter) do
+        table.insert(result, match);
+	end
+	
+    return result;
+end
+
 SLASH_BLACKLIST1 = "/blacklist"
+SLASH_BLACKLIST2 = "/bl"
 function SlashCmdList.BLACKLIST(msg)	
-	--printTable(LookupTable)
+	debugOutput('Command arguments:', msg)
 
-	local name, realm = UnitName('player')
-
-	if realm == nil then
-		realm = GetRealmName()
+	if msg == '' then
+		if blacklistLookup ~= nil then
+			for index, value in pairs(blacklistLookup) do
+				nameRealmSplit = splitString(index, '-')
+				
+				name = nameRealmSplit[1]
+				realm = nameRealmSplit[2]
+		
+				colorizedUnitName = colorizeFullUnitName(name, realm, value['CLASS'])
+		
+				output = colorizedUnitName .. ' blacklist reason: ' .. value['REASON']
+				print(output)
+			end
+		end
 	end
 
-	for i = 1, 12 do
-		print('|cff' .. colors[i] .. name .. '|r-'.. realm)
-	end
-end
+	if msg == 'target' then
+		local fullName = getFullUnitName('target')
 
-SLASH_BL1 = "/bl"
-function SlashCmdList.BL(msg)
-	local fullName = getFullUnitName('target')
-
-	if fullName ~= nil then
-		local newEntry = {}
-		local localizedClass, englishClass, classIndex = UnitClass("target");
-
-
-		newEntry['REASON'] = 'a very bad man'
-		newEntry['CLASS'] = classIndex
-
-		LookupTable[fullName] = newEntry
+		if fullName ~= nil then
+			local newEntry = {}
+			local localizedClass, englishClass, classIndex = UnitClass("target");
+	
+	
+			newEntry['REASON'] = 'a very bad man'
+			newEntry['CLASS'] = classIndex
+	
+			blacklistLookup[fullName] = newEntry
+		end
 	end
 end
