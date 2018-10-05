@@ -1,4 +1,5 @@
-﻿local debug = 0
+﻿local debug = 1
+local enabled = false
 
 local function debugOutput(identifier, output)
 	if debug == 1 then
@@ -23,22 +24,6 @@ local function getFullUnitName(unit)
 	return name, realm
 end
 
-local onEvent = function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == "Blacklist" then
-        -- Our saved variables, if they exist, have been loaded at this point.
-        if blacklistLookup == nil then
-            -- This is the first time this addon is loaded; set SVs to default values
-			blacklistLookup = {}
-			
-			debugOutput('First login', 'blacklistLookup initialized.')
-		end
-	else
-		if event == "PLAYER_LOGOUT" then
-			-- nothing to do, remove later
-		end
-    end
-end
-
 local function printTable(table)
 	for index, value in pairs(table) do
 		if type(value) == "table" then
@@ -50,10 +35,27 @@ local function printTable(table)
 	end
 end
 
-Blacklist = CreateFrame("Frame")
-Blacklist:SetScript("OnEvent", onEvent)
-Blacklist:RegisterEvent("ADDON_LOADED")
-Blacklist:RegisterEvent("PLAYER_LOGOUT")
+local function tableHasValue (table, inputValue)
+    for index, value in pairs(table) do
+		if value == inputValue then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function tableHasIndex (table, inputIndex)
+	for index, value in pairs(table) do
+		if index == inputIndex then
+            return true
+        end
+    end
+
+    return false
+end
+
+local sessionBlacklistedPlayersReported = nil
 
 classColorsLookup = {
 	"C79C6E", -- [1] Warrior
@@ -94,6 +96,21 @@ function splitString(original, delimiter)
 	end
 	
     return result;
+end
+
+local function getRealmSuffixedGroupMemberNames()
+	local group = GetHomePartyInfo()
+	for index, groupMember in pairs(group) do
+
+		foundDash = string.find(groupMember, "-")
+
+		if foundDash == nil then
+			groupMember = groupMember .. "-" .. GetRealmName()
+			group[index] = groupMember
+		end
+	end
+
+	return group
 end
 
 SLASH_BLACKLIST1 = "/blacklist"
@@ -143,11 +160,10 @@ function SlashCmdList.BLACKLIST(msg)
 		local name, realm = getFullUnitName('target')
 
 		if name ~= nil and realm ~= nil then
-
 			reason = remainingArgs
 
 			if reason == nil or reason == '' then
-				reason = 'None reason provided.'
+				reason = 'No reason provided.'
 			end
 
 			debugOutput('reason', reason)
@@ -171,3 +187,73 @@ function SlashCmdList.BLACKLIST(msg)
 		print("Your blacklist has been cleared.")
 	end
 end
+
+local function groupChange()
+	if enabled then
+		if sessionBlacklistedPlayersReported == nil then
+			sessionBlacklistedPlayersReported = {}
+			--sessionBlacklistedPlayersReported['placeholder-realm']
+		end
+
+		groupMembers = getRealmSuffixedGroupMemberNames()
+
+		for index, groupMember in pairs(groupMembers) do
+			if tableHasIndex(blacklistLookup, groupMember) then
+				if tableHasIndex(sessionBlacklistedPlayersReported, groupMember) then
+					--debugOutput("matched player already found", "")
+					-- Do nothing, don't report the same player twice
+				else
+					sessionBlacklistedPlayersReported[groupMember] = true
+
+					entry = blacklistLookup[groupMember]
+
+					nameRealmSplit = splitString(groupMember, '-')
+				
+					name = nameRealmSplit[1]
+					realm = nameRealmSplit[2]
+					class = entry['CLASS']
+					reason = entry['REASON']
+	
+					output = '<Blacklist>  ' .. name .. '-' .. realm .. ' is blacklisted for: ' .. reason
+
+					SendChatMessage(output, "party" , nil , "channel")
+				end
+			end
+		end
+	end
+end
+
+local onEvent = function(self, event, arg1)
+	debugOutput("Event:", event)
+    if event == "ADDON_LOADED" and arg1 == "Blacklist" then
+        -- Our saved variables, if they exist, have been loaded at this point.
+        if blacklistLookup == nil then
+            -- This is the first time this addon is loaded; set SVs to default values
+			blacklistLookup = {}
+			
+			debugOutput('First login', 'blacklistLookup initialized.')
+		end
+	else
+		if event == "GROUP_ROSTER_UPDATE" then
+			groupChange()
+		else
+			if event == "PLAYER_ALIVE" then
+				-- add a timer, gap isn't big enough to solve the issue
+				enabled = true
+				groupChange()
+			end
+		end
+    end
+end
+
+Blacklist = CreateFrame("Frame")
+Blacklist:SetScript("OnEvent", onEvent)
+Blacklist:RegisterEvent("ADDON_LOADED")
+Blacklist:RegisterEvent("PLAYER_LOGOUT")
+Blacklist:RegisterEvent("RAID_ROSTER_UPDATE")
+Blacklist:RegisterEvent("GROUP_ROSTER_UPDATE")
+Blacklist:RegisterEvent("GROUP_INVITE_CONFIRMATION")
+Blacklist:RegisterEvent("GROUP_JOINED")
+Blacklist:RegisterEvent("GROUP_LEFT")
+Blacklist:RegisterEvent("INSTANCE_GROUP_SIZE_CHANGED")
+Blacklist:RegisterEvent("PLAYER_ALIVE")
