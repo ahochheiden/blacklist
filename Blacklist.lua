@@ -1,27 +1,37 @@
-﻿local debug = 1
+﻿-- Variables
+local debug = 1
 local enabled = false
+local timeLoggedIn = 0
+local loginDelay = 7
 
+local sessionBlacklistedPlayersReported = nil
+
+local classColorsLookup = {
+	"C79C6E", -- [1] Warrior
+	"F58CBA", -- [2] Paladin
+	"ABD473", -- [3] Hunter
+	"FFF569", -- [4] Rogue
+	"FFFFFF", -- [5] Priest
+	"C41F3B", -- [6] Death Knight
+	"0070DE", -- [7] Shaman
+	"40C7EB", -- [8] Mage
+	"8787ED", -- [9] Warlock
+	"00FF96", -- [10] Monk
+	"FF7D0A", -- [11] Druid
+	"A330C9", -- [12] Demon Hunter
+}
+
+-- Utility functions
 local function debugOutput(identifier, output)
 	if debug == 1 then
 		print(identifier .. ': "'.. output .. '"')
 	end
 end
 
-local function getFullUnitName(unit)
-	local name, realm = nil
-
-	if UnitPlayerControlled(unit) then
-		name, realm = UnitName(unit)
-
-		-- realm name is nil is they are from the same realm as
-		-- as the local palyer, so we need to get the name of the
-		-- realm we're on for the lookup table
-		if realm == nil then
-			realm = GetRealmName()
-		end
+local function debugOutput(output)
+	if debug == 1 then
+		print(output)
 	end
-
-	return name, realm
 end
 
 local function printTable(table)
@@ -55,40 +65,7 @@ local function tableHasIndex (table, inputIndex)
     return false
 end
 
-local sessionBlacklistedPlayersReported = nil
-
-classColorsLookup = {
-	"C79C6E", -- [1] Warrior
-	"F58CBA", -- [2] Paladin
-	"ABD473", -- [3] Hunter
-	"FFF569", -- [4] Rogue
-	"FFFFFF", -- [5] Priest
-	"C41F3B", -- [6] Death Knight
-	"0070DE", -- [7] Shaman
-	"40C7EB", -- [8] Mage
-	"8787ED", -- [9] Warlock
-	"00FF96", -- [10] Monk
-	"FF7D0A", -- [11] Druid
-	"A330C9", -- [12] Demon Hunter
-}
-
-local function colorize(color, text)
-	local colorHelper = {
-		'|cff', color, text, '|r'
-	}
-
-	return table.concat(colorHelper, "")
-end
-
-local function colorizeFullUnitName(name, realm, classIndex)
-	local color = classColorsLookup[classIndex]
-
-	output = colorize(color, name) .. '-' .. realm
-
-	return output
-end
-
-function splitString(original, delimiter)
+local function splitString(original, delimiter)
 	result = {};
 	
     for match in (original .. delimiter):gmatch("(.-)" .. delimiter) do
@@ -98,7 +75,58 @@ function splitString(original, delimiter)
     return result;
 end
 
-local function getRealmSuffixedGroupMemberNames()
+-- Setup
+local function onUpdate(self,elapsed)
+	Blacklist:LoginDelay(elapsed)
+  end
+
+local onEvent = function(self, event, ...)
+	debugOutput("Event: ", self .. event)
+	if event ~= "" and event ~= nil then
+		self[event](self, event, ...)	
+	end
+end
+
+Blacklist = CreateFrame("Frame")
+Blacklist:SetScript("OnEvent", onEvent)
+Blacklist:SetScript("OnUpdate", onUpdate)
+Blacklist:RegisterEvent("ADDON_LOADED")
+Blacklist:RegisterEvent("GROUP_ROSTER_UPDATE")
+Blacklist:RegisterEvent("GROUP_JOINED")
+
+-- Addon specific functions
+local function getFullUnitName(unit)
+	local name, realm = nil
+
+	if UnitPlayerControlled(unit) then
+		name, realm = UnitName(unit)
+
+		-- realm name is nil is they are from the same realm as
+		-- as the local palyer, so we need to append the name of the
+		-- current realm to be consistent in the lookup table
+		if realm == nil then
+			realm = GetRealmName()
+		end
+	end
+
+	return name, realm
+end
+
+function Blacklist:colorizeFullUnitName(name, realm, classIndex)
+	local color = classColorsLookup[classIndex]
+
+	local colorHelper = {
+		'|cff', color, name, '|r'
+	}
+
+	coloredName = table.concat(colorHelper, "")
+
+	output = coloredName .. '-' .. realm
+
+	return output
+end
+
+function Blacklist:getRealmSuffixedGroupMemberNames()
 	local group = GetHomePartyInfo()
 	for index, groupMember in pairs(group) do
 
@@ -188,72 +216,68 @@ function SlashCmdList.BLACKLIST(msg)
 	end
 end
 
-local function groupChange()
+function Blacklist:runCheck()
 	if enabled then
 		if sessionBlacklistedPlayersReported == nil then
 			sessionBlacklistedPlayersReported = {}
-			--sessionBlacklistedPlayersReported['placeholder-realm']
 		end
 
-		groupMembers = getRealmSuffixedGroupMemberNames()
+		if IsInGroup() then
+			groupMembers = getRealmSuffixedGroupMemberNames()
 
-		for index, groupMember in pairs(groupMembers) do
-			if tableHasIndex(blacklistLookup, groupMember) then
-				if tableHasIndex(sessionBlacklistedPlayersReported, groupMember) then
-					--debugOutput("matched player already found", "")
-					-- Do nothing, don't report the same player twice
-				else
-					sessionBlacklistedPlayersReported[groupMember] = true
+			for index, groupMember in pairs(groupMembers) do
+				if tableHasIndex(blacklistLookup, groupMember) then
+					if tableHasIndex(sessionBlacklistedPlayersReported, groupMember) then
+						debugOutput("Matched player (" .. groupMember .. ") already reported. Skipping")
+						-- Do nothing, don't report the same player twice
+					else
+						sessionBlacklistedPlayersReported[groupMember] = true
 
-					entry = blacklistLookup[groupMember]
+						entry = blacklistLookup[groupMember]
 
-					nameRealmSplit = splitString(groupMember, '-')
+						nameRealmSplit = splitString(groupMember, '-')
 				
-					name = nameRealmSplit[1]
-					realm = nameRealmSplit[2]
-					class = entry['CLASS']
-					reason = entry['REASON']
+						name = nameRealmSplit[1]
+						realm = nameRealmSplit[2]
+						class = entry['CLASS']
+						reason = entry['REASON']
 	
-					output = '<Blacklist>  ' .. name .. '-' .. realm .. ' is blacklisted for: ' .. reason
+						output = '<Blacklist>  ' .. name .. '-' .. realm .. ' is blacklisted for: ' .. reason
 
-					SendChatMessage(output, "party" , nil , "channel")
+						SendChatMessage(output, "party" , nil , "channel")
+					end
 				end
 			end
 		end
 	end
 end
 
-local onEvent = function(self, event, arg1)
-	debugOutput("Event:", event)
-    if event == "ADDON_LOADED" and arg1 == "Blacklist" then
-        -- Our saved variables, if they exist, have been loaded at this point.
-        if blacklistLookup == nil then
-            -- This is the first time this addon is loaded; set SVs to default values
-			blacklistLookup = {}
-			
-			debugOutput('First login', 'blacklistLookup initialized.')
+ function Blacklist:LoginDelay(elapsed)
+	if enabled == false then
+		timeLoggedIn = timeLoggedIn + elapsed
+
+		if timeLoggedIn > loginDelay then
+			enabled = true
+			debugOutput("Enabled = true")
+
+			Blacklist:runCheck()
 		end
-	else
-		if event == "GROUP_ROSTER_UPDATE" then
-			groupChange()
-		else
-			if event == "PLAYER_ALIVE" then
-				-- add a timer, gap isn't big enough to solve the issue
-				enabled = true
-				groupChange()
-			end
-		end
-    end
+	end
 end
 
-Blacklist = CreateFrame("Frame")
-Blacklist:SetScript("OnEvent", onEvent)
-Blacklist:RegisterEvent("ADDON_LOADED")
-Blacklist:RegisterEvent("PLAYER_LOGOUT")
-Blacklist:RegisterEvent("RAID_ROSTER_UPDATE")
-Blacklist:RegisterEvent("GROUP_ROSTER_UPDATE")
-Blacklist:RegisterEvent("GROUP_INVITE_CONFIRMATION")
-Blacklist:RegisterEvent("GROUP_JOINED")
-Blacklist:RegisterEvent("GROUP_LEFT")
-Blacklist:RegisterEvent("INSTANCE_GROUP_SIZE_CHANGED")
-Blacklist:RegisterEvent("PLAYER_ALIVE")
+-- Event Handlers
+function ADDON_LOADED(self, player)
+    -- Our saved variables, if they exist, have been loaded at this point.
+    if blacklistLookup == nil then
+        -- This is the first time this addon is loaded; set SVs to default values
+		blacklistLookup = {}
+	end
+end
+
+function GROUP_ROSTER_UPDATE()
+	Blacklist:runCheck()
+end
+
+function GROUP_JOINED()
+	Blacklist:runCheck()
+end
