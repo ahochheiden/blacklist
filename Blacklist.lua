@@ -1,5 +1,6 @@
 ﻿-- Variables
-local debug = 1
+local debug = 0
+
 local enabled = false
 local timeLoggedIn = 0
 local loginDelay = 7
@@ -81,7 +82,6 @@ local function onUpdate(self,elapsed)
   end
 
 local onEvent = function(self, event, ...)
-	debugOutput("Event: ", self .. event)
 	if event ~= "" and event ~= nil then
 		self[event](self, event, ...)	
 	end
@@ -92,10 +92,9 @@ Blacklist:SetScript("OnEvent", onEvent)
 Blacklist:SetScript("OnUpdate", onUpdate)
 Blacklist:RegisterEvent("ADDON_LOADED")
 Blacklist:RegisterEvent("GROUP_ROSTER_UPDATE")
-Blacklist:RegisterEvent("GROUP_JOINED")
 
 -- Addon specific functions
-local function getFullUnitName(unit)
+function Blacklist:getFullUnitName(unit)
 	local name, realm = nil
 
 	if UnitPlayerControlled(unit) then
@@ -166,18 +165,18 @@ function SlashCmdList.BLACKLIST(msg)
 			 end
 
 			if playersBlacklisted == 0 then
-				print('Your blacklist is currently empty.')
+				print('<Blacklist> Your blacklist is currently empty.')
 			else		
-				print('Blacklisted Player(s):')		
+				print('<Blacklist> Blacklisted Player(s):')		
 				for index, value in pairs(blacklistLookup) do
 					nameRealmSplit = splitString(index, '-')
 				
 					name = nameRealmSplit[1]
 					realm = nameRealmSplit[2]
 		
-					colorizedUnitName = colorizeFullUnitName(name, realm, value['CLASS'])
+					colorizedUnitName = Blacklist:colorizeFullUnitName(name, realm, value['CLASS'])
 		
-					output = colorizedUnitName .. ' blacklist reason: ' .. value['REASON']
+					output = '<Blacklist> ' .. colorizedUnitName .. ' blacklist reason: ' .. value['REASON']
 					print(output)
 				end
 			end
@@ -185,7 +184,7 @@ function SlashCmdList.BLACKLIST(msg)
 	end
 
 	if command == 'target' then
-		local name, realm = getFullUnitName('target')
+		local name, realm = Blacklist:getFullUnitName('target')
 
 		if name ~= nil and realm ~= nil then
 			reason = remainingArgs
@@ -206,24 +205,24 @@ function SlashCmdList.BLACKLIST(msg)
 
 			blacklistLookup[fullName] = newEntry
 			
-			print('Blacklisting: '.. colorizeFullUnitName(name, realm, classIndex) .. ', Reason: ' .. reason)
+			print('<Blacklist> Added '.. Blacklist:colorizeFullUnitName(name, realm, classIndex) .. ', Reason: ' .. reason)
 		end
 	end
 
 	if command == 'clear' then
 		blacklistLookup = {}
-		print("Your blacklist has been cleared.")
+		print("<Blacklist> Your blacklist has been cleared.")
 	end
 end
 
-function Blacklist:runCheck()
+function Blacklist:checkBlacklist()
 	if enabled then
 		if sessionBlacklistedPlayersReported == nil then
 			sessionBlacklistedPlayersReported = {}
 		end
 
 		if IsInGroup() then
-			groupMembers = getRealmSuffixedGroupMemberNames()
+			groupMembers = Blacklist:getRealmSuffixedGroupMemberNames()
 
 			for index, groupMember in pairs(groupMembers) do
 				if tableHasIndex(blacklistLookup, groupMember) then
@@ -235,14 +234,10 @@ function Blacklist:runCheck()
 
 						entry = blacklistLookup[groupMember]
 
-						nameRealmSplit = splitString(groupMember, '-')
-				
-						name = nameRealmSplit[1]
-						realm = nameRealmSplit[2]
 						class = entry['CLASS']
 						reason = entry['REASON']
 	
-						output = '<Blacklist>  ' .. name .. '-' .. realm .. ' is blacklisted for: ' .. reason
+						output = '<Blacklist>  ' .. groupMember .. ' is blacklisted for: ' .. reason
 
 						SendChatMessage(output, "party" , nil , "channel")
 					end
@@ -260,13 +255,13 @@ end
 			enabled = true
 			debugOutput("Enabled = true")
 
-			Blacklist:runCheck()
+			Blacklist:checkBlacklist()
 		end
 	end
 end
 
 -- Event Handlers
-function ADDON_LOADED(self, player)
+function Blacklist:ADDON_LOADED(self, player)
     -- Our saved variables, if they exist, have been loaded at this point.
     if blacklistLookup == nil then
         -- This is the first time this addon is loaded; set SVs to default values
@@ -274,10 +269,6 @@ function ADDON_LOADED(self, player)
 	end
 end
 
-function GROUP_ROSTER_UPDATE()
-	Blacklist:runCheck()
-end
-
-function GROUP_JOINED()
-	Blacklist:runCheck()
+function Blacklist:GROUP_ROSTER_UPDATE()
+	Blacklist:checkBlacklist()
 end
